@@ -24,6 +24,30 @@ first-class outcome.
 | A weak lineup or a weak script skips the episode | `pipeline/stages.py::SkipEpisode` |
 | An exhausted pool tries the fallback template — never a relaxed primary | `pipeline/runner.py::run_episode` |
 | Layout, typography, timing and safe margins are code, not per-episode whim | `render/design.py`, `render/scene_plan.py` |
+| Credentials never reach a prompt, a config file or the database | `generation/cloud.py`, `observability/logging.py` |
+
+---
+
+## Inference and hosting
+
+All inference is hosted — **Cloudflare Workers AI first, OpenRouter second,
+and a deterministic writer as the floor** so an outage degrades the episode
+rather than failing the run. Narration and transcription go to Workers AI too.
+
+```yaml
+provider:
+  kind: cloudflare
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  secondary_kind: openrouter
+  secondary_model: anthropic/claude-3.5-haiku
+  fallback: deterministic
+```
+
+Hosting is Cloudflare: a Worker on a cron trigger enqueues the day's episode,
+a Container runs the pipeline, artifacts land in R2 and the control plane in
+D1. The render tier is a Container rather than a Worker because one episode
+shells out to FFmpeg and Chromium — see `docs/cloudflare.md` for that boundary
+and for what has and has not been verified live.
 
 ---
 
@@ -95,7 +119,8 @@ src/mpvf/
   media/         download, hashing, classification, per-property image choice
   research/      query planning, source capture (MediaWiki API), claims
   evidence/      the bundle: the writer's entire world
-  generation/    provider interface (Ollama, deterministic, fallback chain)
+  generation/    provider chain: Workers AI, OpenRouter, Ollama, deterministic
+  storage/       R2 artifact mirroring, D1 control-plane client
   scripting/     versioned prompts, schemas, fact validator, anti-slop gate
   speech/        Maine pronunciation lexicon, Kokoro TTS, captions, alignment
   render/        scene plan, SVG design system, FFmpeg graph, thumbnails
@@ -105,6 +130,7 @@ src/mpvf/
   cli/           Typer commands, doctor, scaffolding, retention cleanup
 config/          settings, templates, pronunciation, verification domains
 migrations/      Alembic environment and versioned schema revisions
+deploy/          wrangler.toml, control-plane Worker, container image
 tests/           unit + adapter fixture + offline end-to-end
 docs/            architecture, operator guide, source adapters, video design
 ```
@@ -127,10 +153,11 @@ parsing, selection, evidence, scripting with fact validation and the editorial
 gate, narration and captions, scene planning, the FFmpeg command builder, QA,
 the publication package, the dashboard and the CLI.
 
-Requires real dependencies to exercise live: Playwright (discovery), Ollama
-(model-written prose — the deterministic writer covers the rest), Kokoro
-(narration audio), FFmpeg (encoding), an SVG rasterizer (burned-in overlays),
-and YouTube OAuth (upload).
+Hosted inference, R2 mirroring and the D1 client are covered by tests against
+mock transports that assert the exact request shapes. What still needs real
+credentials or binaries: Playwright (discovery), FFmpeg (encoding), an SVG
+rasterizer (overlays), YouTube OAuth (upload), and a first live call against
+Workers AI and OpenRouter to confirm their current contracts.
 
 See `docs/operator-guide.md` for the pilot procedure and `docs/architecture.md`
 for how the pieces fit.

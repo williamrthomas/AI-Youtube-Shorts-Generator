@@ -18,27 +18,49 @@ from pydantic import BaseModel, Field
 PublishingMode = Literal["review", "private_upload", "scheduled", "full_auto"]
 
 
-class ProviderSettings(BaseModel):
-    """Generation-provider configuration (§12.2). Model names are config."""
+ProviderKind = Literal["cloudflare", "openrouter", "ollama", "deterministic", "openai_compatible"]
 
-    kind: Literal["ollama", "deterministic", "openai_compatible"] = "deterministic"
-    model: str = "qwen2.5:14b-instruct"
+
+class ProviderSettings(BaseModel):
+    """Generation-provider configuration (§12.2). Model names are config.
+
+    ``cloudflare`` and ``openrouter`` are hosted; ``ollama`` is local. The
+    fallback chain runs primary → secondary → deterministic, so a hosted
+    outage degrades to a plainer episode rather than a failed run.
+    """
+
+    kind: ProviderKind = "cloudflare"
+    model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
     host: str = "http://127.0.0.1:11434"
     temperature: float = 0.4
     timeout_seconds: int = 180
+    max_attempts: int = 3
     fallback: Literal["deterministic", "none"] = "deterministic"
+
+    # A second hosted provider tried before the deterministic writer (FR-082).
+    secondary_kind: ProviderKind | None = "openrouter"
+    secondary_model: str = "anthropic/claude-3.5-haiku"
+
+    # Only used by kind="openai_compatible" for a self-hosted gateway.
+    base_url: str = ""
+    api_key_env: str = "MPVF_PROVIDER_API_KEY"
+
+    # OpenRouter routes to many upstreams; require ones that honour our schema.
+    require_schema_support: bool = True
 
 
 class SpeechSettings(BaseModel):
-    engine: Literal["kokoro", "null"] = "kokoro"
+    engine: Literal["cloudflare", "kokoro", "null"] = "cloudflare"
+    model: str = "@cf/myshell-ai/melotts"
     voice: str = "af_heart"
     speed: float = 1.0
     sample_rate: int = 24000
     sentence_pause_ms: int = 220
     section_pause_ms: int = 550
     target_lufs: float = -16.0
-    aligner: Literal["faster_whisper", "none"] = "faster_whisper"
-    alignment_model: str = "base.en"
+    aligner: Literal["cloudflare", "faster_whisper", "none"] = "cloudflare"
+    alignment_model: str = "@cf/openai/whisper-large-v3-turbo"
+    language: str = "en"
 
 
 class RenderSettings(BaseModel):
@@ -98,6 +120,21 @@ class RetentionSettings(BaseModel):
     protect_published_masters: bool = True
 
 
+class StorageSettings(BaseModel):
+    """Where run artifacts and the database live (§9.5).
+
+    ``local`` keeps the filesystem/SQLite layout. ``r2`` mirrors artifacts to
+    Cloudflare R2 so a container can be discarded after a run.
+    """
+
+    artifacts: Literal["local", "r2"] = "local"
+    r2_bucket: str = "mpvf-artifacts"
+    r2_prefix: str = "runs"
+    r2_endpoint: str = ""  # https://<account>.r2.cloudflarestorage.com
+    database: Literal["sqlite", "d1"] = "sqlite"
+    d1_database_id: str = ""
+
+
 class Settings(BaseModel):
     """Root settings object."""
 
@@ -121,6 +158,8 @@ class Settings(BaseModel):
 
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = 8765
+
+    storage: StorageSettings = Field(default_factory=lambda: StorageSettings())
 
     @property
     def db_path(self) -> Path:

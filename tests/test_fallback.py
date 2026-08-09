@@ -203,7 +203,7 @@ class TestFallbackExecution:
             "alpha", to_stage="select", context_overrides=overrides
         )
         assert summary["templates_tried"] == ["alpha", "beta"]
-        assert summary["outcome"] in {"skipped", "not_attempted"}
+        assert summary["outcome"] == "skipped"
 
     @pytest.mark.parametrize(("depth", "expected"), [(1, ["a1", "a2"]), (2, ["a1", "a2", "a3"])])
     def test_depth_bounds_the_number_of_fallbacks(self, settings, overrides, depth, expected):
@@ -221,13 +221,32 @@ class TestFallbackExecution:
         assert summary["outcome"] == "skipped"
 
     def test_a_missing_fallback_target_is_reported_not_crashed(self, settings, overrides):
+        """The summary still describes the run that happened."""
+
         _write_template(settings, "primary", min_candidate_quality=99, fallback_template="ghost")
         summary = Runner(settings).run_episode(
             "primary", to_stage="select", context_overrides=overrides
         )
-        assert summary["outcome"] == "not_attempted"
-        assert summary["code"] == "unknown_fallback_template"
-        assert summary["attempts"][0]["outcome"] == "skipped"
+        # The real attempt is the base, so run_id and artifacts remain reachable.
+        assert summary["outcome"] == "skipped"
+        assert summary["template"] == "primary"
+        assert summary["run_id"]
+        assert Path(summary["artifact_dir"]).exists()
+        # The chain problem is attached rather than hidden.
+        assert summary["fallback_problem"]["code"] == "unknown_fallback_template"
+        assert "ghost" in summary["fallback_problem"]["reason"]
+
+    def test_a_cycle_reports_the_problem_and_keeps_the_last_real_result(self, settings, overrides):
+        _write_template(settings, "alpha", min_candidate_quality=99, fallback_template="beta")
+        _write_template(settings, "beta", min_candidate_quality=99, fallback_template="alpha")
+
+        summary = Runner(settings).run_episode(
+            "alpha", to_stage="select", context_overrides=overrides
+        )
+        assert summary["outcome"] == "skipped"
+        assert summary["template"] == "beta"
+        assert summary["run_id"]
+        assert summary["fallback_problem"]["code"] == "fallback_cycle"
 
     def test_a_non_pool_failure_does_not_fall_back(self, settings, monkeypatch):
         """A script failure means the writing was bad, not the listings."""

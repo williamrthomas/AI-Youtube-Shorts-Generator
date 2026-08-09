@@ -15,7 +15,10 @@ from mpvf.config.settings import Settings
 from mpvf.speech.pronunciation import PronunciationLexicon
 
 SETTINGS_EXAMPLE = """# Maine Property Video Factory settings.
-# Copy to config/settings.yaml and edit. Secrets never belong in this file.
+# Copy to config/settings.yaml and edit. Secrets never belong in this file —
+# set MPVF_CLOUDFLARE_ACCOUNT_ID / MPVF_CLOUDFLARE_API_TOKEN /
+# MPVF_OPENROUTER_API_KEY in the environment, or drop them as files in
+# secrets/ (mode 700).
 
 data_dir: data
 secrets_dir: secrets
@@ -29,18 +32,35 @@ timezone: America/New_York
 publishing_mode: private_upload
 earliest_publish_hour: 17
 
+# All inference is hosted: Cloudflare Workers AI first, OpenRouter second,
+# and the deterministic writer as the floor so an outage degrades rather
+# than fails. Model ids are configuration — swap them freely.
 provider:
-  kind: ollama            # ollama | deterministic | openai_compatible
-  model: qwen2.5:14b-instruct
-  host: http://127.0.0.1:11434
+  kind: cloudflare              # cloudflare | openrouter | ollama | openai_compatible | deterministic
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  secondary_kind: openrouter
+  secondary_model: anthropic/claude-3.5-haiku
   temperature: 0.4
+  timeout_seconds: 180
+  max_attempts: 3
   fallback: deterministic
+  require_schema_support: true  # OpenRouter: only route to upstreams honouring json_schema
 
 speech:
-  engine: kokoro
+  engine: cloudflare            # cloudflare | kokoro | null
+  model: "@cf/myshell-ai/melotts"
   voice: af_heart
+  language: en
   speed: 1.0
-  aligner: faster_whisper
+  aligner: cloudflare           # cloudflare | faster_whisper | none
+  alignment_model: "@cf/openai/whisper-large-v3-turbo"
+
+storage:
+  artifacts: local              # local | r2
+  r2_bucket: mpvf-artifacts
+  r2_prefix: runs
+  # r2_endpoint: https://<account-id>.r2.cloudflarestorage.com
+  database: sqlite              # sqlite | d1
 
 render:
   width: 1920

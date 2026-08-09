@@ -15,10 +15,9 @@ from typing import Any, cast
 from mpvf.config.templates import SearchTemplate
 from mpvf.evidence.bundle import writer_view
 from mpvf.generation.provider import (
-    DeterministicProvider,
-    FallbackProvider,
     GenerationProvider,
     Message,
+    deterministic_floor,
 )
 from mpvf.models.domain import (
     Claim,
@@ -104,13 +103,9 @@ def _with_deterministic_fallback(
     def handler(_messages: list[Message]) -> dict[str, Any]:
         return compose_draft(bundle, template, seed).model_dump()
 
-    if isinstance(provider, DeterministicProvider):
-        provider.register("script_draft", handler)
-        return provider
-    if isinstance(provider, FallbackProvider) and isinstance(
-        provider.secondary, DeterministicProvider
-    ):
-        provider.secondary.register("script_draft", handler)
+    floor = deterministic_floor(provider)
+    if floor is not None:
+        floor.register("script_draft", handler)
     return provider
 
 

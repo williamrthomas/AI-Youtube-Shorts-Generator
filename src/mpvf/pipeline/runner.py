@@ -832,7 +832,11 @@ def stage_narrate(context: RunContext) -> dict[str, Any]:
         context.store.read_json("script", "script.json")
     )
     lexicon = PronunciationLexicon.load(context.settings.pronunciation_path)
-    engine = build_engine(context.settings.speech)
+    engine = build_engine(
+        context.settings.speech,
+        credentials=context.get("cloud_credentials"),
+        ffmpeg_binary=context.settings.render.ffmpeg_binary,
+    )
     narrator = Narrator(engine, lexicon, context.settings.speech)
 
     narrations, issues = narrator.synthesize_script(script.segments, context.store.dir("audio"))
@@ -840,6 +844,12 @@ def stage_narrate(context: RunContext) -> dict[str, Any]:
         [narration.audio_path for narration in narrations],
         context.store.path("audio", "narration.wav"),
     )
+
+    # §13.4: verify what was actually spoken against the approved script.
+    transcript = _transcribe(context, combined)
+    if transcript:
+        context.put("transcript", transcript)
+        context.store.write_text("audio", "transcript.txt", transcript)
 
     cues = build_cues(script.segments, narrations)
     caption_paths = write_captions(cues, context.store.dir("captions"))
@@ -854,6 +864,7 @@ def stage_narrate(context: RunContext) -> dict[str, Any]:
             "issues": [issue.__dict__ for issue in issues],
             "pronunciation_watchlist": watchlist,
             "combined": str(combined),
+            "transcript_verified": bool(transcript),
         },
     )
     context.put("narrations", narrations)
@@ -877,6 +888,45 @@ def stage_narrate(context: RunContext) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 # Stage: render
 # --------------------------------------------------------------------------
+
+
+def _transcribe(context: RunContext, audio_path: Path) -> str | None:
+    """Transcribe the narration for the similarity gate, if a transcriber is configured.
+
+    A missing transcriber is not a failure here: QA reports the gate as
+    unverified rather than blocking, and `mpvf doctor` says why.
+    """
+
+    settings = context.settings.speech
+    logger = context.stage_logger("narrate")
+
+    try:
+        if settings.aligner == "cloudflare":
+            from mpvf.generation.cloud import CloudCredentials
+            from mpvf.speech.cloud_tts import WorkersAITranscriber
+
+            credentials = context.get("cloud_credentials") or CloudCredentials.load()
+            transcriber = WorkersAITranscriber(
+                account_id=credentials.cloudflare_account_id or "",
+                api_token=credentials.cloudflare_api_token or "",
+                model=settings.alignment_model,
+            )
+            if not transcriber.available():
+                logger.warning("transcription_skipped", "no Cloudflare credentials")
+                return None
+            return transcriber.transcribe(audio_path)
+
+        if settings.aligner == "faster_whisper":
+            from mpvf.speech.captions import WhisperAligner
+
+            aligner = WhisperAligner(settings.alignment_model)
+            if not aligner.available():
+                logger.warning("transcription_skipped", "faster-whisper is not installed")
+                return None
+            return aligner.transcribe(audio_path)
+    except Exception as exc:  # noqa: BLE001 - QA reports it; do not fail narration
+        logger.warning("transcription_failed", str(exc))
+    return None
 
 
 @registry.register(
@@ -1546,13 +1596,25 @@ class Runner:
             )
             slug = next_slug
 
-        final = attempts[-1]
-        return {
+        # A synthetic entry (a missing fallback, a cycle) records why the chain
+        # stopped; it must annotate the real result, not replace it. Otherwise
+        # the caller gets a summary with no run_id pointing at a template that
+        # never ran.
+        executed = [item for item in attempts if "run_id" in item]
+        final = executed[-1] if executed else attempts[-1]
+        summary = {
             **final,
             "attempts": attempts,
             "templates_tried": visited,
-            "used_fallback": len(visited) > 1,
+            "used_fallback": len(executed) > 1,
         }
+        unexecuted = [item for item in attempts if "run_id" not in item]
+        if unexecuted:
+            summary["fallback_problem"] = {
+                "code": unexecuted[-1].get("code"),
+                "reason": unexecuted[-1].get("reason"),
+            }
+        return summary
 
     def logger_for(self, run_id: str | None) -> RunLogger:
         return RunLogger(run_id or "-", self.database)

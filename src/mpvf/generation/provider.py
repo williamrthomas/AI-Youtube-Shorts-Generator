@@ -267,6 +267,30 @@ class FallbackProvider:
         return self.secondary.generate_structured(task, messages, schema, temperature)
 
 
+def deterministic_floor(provider: GenerationProvider) -> DeterministicProvider | None:
+    """Find the deterministic writer at the bottom of a fallback chain.
+
+    The chain nests (``Fallback(cloudflare, Fallback(openrouter, deterministic))``),
+    so callers that need to register a task handler must walk it rather than
+    peek one level down.
+    """
+
+    seen: set[int] = set()
+    current: Any = provider
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, DeterministicProvider):
+            return current
+        if isinstance(current, FallbackProvider):
+            found = deterministic_floor(current.primary)
+            if found is not None:
+                return found
+            current = current.secondary
+            continue
+        return None
+    return None
+
+
 def _hash_messages(messages: list[Message]) -> str:
     import hashlib
 
@@ -274,17 +298,100 @@ def _hash_messages(messages: list[Message]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
+def _build_one(
+    kind: str,
+    model: str,
+    settings: Any,
+    credentials: Any,
+    client: Any = None,
+) -> GenerationProvider | None:
+    """Construct a single provider, or ``None`` if it cannot be configured."""
+
+    from mpvf.generation.cloud import (
+        CredentialMissing,
+        OpenRouterProvider,
+        WorkersAIProvider,
+    )
+    from mpvf.generation.openai_compatible import OpenAICompatibleProvider
+
+    common = {
+        "timeout": settings.timeout_seconds,
+        "max_attempts": settings.max_attempts,
+        "client": client,
+    }
+    try:
+        if kind == "cloudflare":
+            return WorkersAIProvider(
+                model=model,
+                account_id=credentials.cloudflare_account_id or "",
+                api_token=credentials.cloudflare_api_token or "",
+                **common,
+            )
+        if kind == "openrouter":
+            return OpenRouterProvider(
+                model=model,
+                api_key=credentials.openrouter_api_key or "",
+                require_parameters=settings.require_schema_support,
+                **common,
+            )
+        if kind == "openai_compatible":
+            import os
+
+            return OpenAICompatibleProvider(
+                model=model,
+                base_url=settings.base_url,
+                api_key=os.environ.get(settings.api_key_env),
+                **common,
+            )
+        if kind == "ollama":
+            return OllamaProvider(model=model, host=settings.host, timeout=settings.timeout_seconds)
+    except CredentialMissing as exc:
+        logger.warning(
+            "provider not configured",
+            extra={"detail": {"kind": kind, "reason": str(exc)}},
+        )
+        return None
+    return None
+
+
 def build_provider(
-    settings: Any, deterministic_handlers: dict[str, Any] | None = None
+    settings: Any,
+    deterministic_handlers: dict[str, Any] | None = None,
+    credentials: Any = None,
+    client: Any = None,
 ) -> GenerationProvider:
-    """Construct the configured provider chain from settings."""
+    """Construct the configured provider chain from settings.
+
+    The chain is primary → secondary → deterministic. Every link is optional:
+    a missing credential drops that provider out with a warning rather than
+    failing the run, and the deterministic writer is always the floor.
+    """
+
+    from mpvf.generation.cloud import CloudCredentials
+
+    if credentials is None:
+        credentials = CloudCredentials.load()
 
     deterministic = DeterministicProvider(deterministic_handlers)
-    if settings.kind == "ollama":
-        primary = OllamaProvider(
-            model=settings.model, host=settings.host, timeout=settings.timeout_seconds
+    if settings.kind == "deterministic":
+        return deterministic
+
+    primary = _build_one(settings.kind, settings.model, settings, credentials, client)
+    secondary = None
+    if settings.secondary_kind and settings.secondary_kind != settings.kind:
+        secondary = _build_one(
+            settings.secondary_kind, settings.secondary_model, settings, credentials, client
         )
-        if settings.fallback == "deterministic":
-            return FallbackProvider(primary, deterministic)
-        return primary
-    return deterministic
+
+    chain = [provider for provider in (primary, secondary) if provider is not None]
+    if not chain:
+        logger.warning("no hosted provider configured; using the deterministic writer")
+        return deterministic
+
+    if settings.fallback == "none":
+        return chain[0] if len(chain) == 1 else FallbackProvider(chain[0], chain[1])
+
+    tail: GenerationProvider = deterministic
+    for provider in reversed(chain):
+        tail = FallbackProvider(provider, tail)
+    return tail

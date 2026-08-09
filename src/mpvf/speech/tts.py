@@ -145,12 +145,39 @@ def read_wav_duration(path: Path | str) -> float:
     return round(frames / rate, 3)
 
 
-def build_engine(settings: SpeechSettings) -> SpeechEngine:
-    if settings.engine == "kokoro":
+def build_engine(
+    settings: SpeechSettings,
+    credentials: Any = None,
+    ffmpeg_binary: str = "ffmpeg",
+) -> SpeechEngine:
+    """Pick the configured engine, degrading to silence only as a last resort.
+
+    The silent engine keeps timing inspectable without model weights, and QA
+    refuses to publish anything it produced.
+    """
+
+    if settings.engine == "cloudflare":
+        from mpvf.generation.cloud import CloudCredentials, CredentialMissing
+        from mpvf.speech.cloud_tts import WorkersAISpeechEngine
+
+        credentials = credentials or CloudCredentials.load()
+        try:
+            return WorkersAISpeechEngine(
+                account_id=credentials.cloudflare_account_id or "",
+                api_token=credentials.cloudflare_api_token or "",
+                model=settings.model,
+                language=settings.language,
+                sample_rate=settings.sample_rate,
+                ffmpeg_binary=ffmpeg_binary,
+            )
+        except CredentialMissing as exc:
+            logger.warning("workers-ai speech unavailable: %s", exc)
+
+    if settings.engine in {"cloudflare", "kokoro"}:
         engine = KokoroEngine(sample_rate=settings.sample_rate)
         if engine.available():
             return engine
-        logger.warning("kokoro unavailable, falling back to silent engine")
+        logger.warning("no configured TTS engine is available; using the silent engine")
     return SilentEngine(sample_rate=settings.sample_rate)
 
 

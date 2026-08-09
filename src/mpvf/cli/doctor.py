@@ -113,51 +113,126 @@ def _playwright() -> dict[str, Any]:
     return _check("playwright", "ok", f"chromium at {executable}", required=False)
 
 
-def _ollama(settings: Settings) -> dict[str, Any]:
-    if settings.provider.kind != "ollama":
+def _cloud_credentials(settings: Settings) -> dict[str, Any]:
+    """Hosted inference needs tokens; report presence, never the values (§16)."""
+
+    from mpvf.generation.cloud import CloudCredentials
+
+    credentials = CloudCredentials.load(settings.secrets_dir)
+    state = credentials.state()
+    wanted: set[str] = set()
+    for kind in (settings.provider.kind, settings.provider.secondary_kind):
+        if kind == "cloudflare":
+            wanted |= {"cloudflare_account_id", "cloudflare_api_token"}
+        if kind == "openrouter":
+            wanted.add("openrouter_api_key")
+    if settings.speech.engine == "cloudflare" or settings.speech.aligner == "cloudflare":
+        wanted |= {"cloudflare_account_id", "cloudflare_api_token"}
+
+    if not wanted:
+        return _check("cloud credentials", "ok", "no hosted service configured", required=False)
+
+    missing = sorted(name for name in wanted if not state[name])
+    if missing:
         return _check(
-            "model provider", "ok", f"provider is '{settings.provider.kind}'", required=False
+            "cloud credentials",
+            "fail",
+            f"missing: {', '.join(missing)} (set MPVF_* env vars or files in {settings.secrets_dir})",
         )
+    return _check("cloud credentials", "ok", f"{len(wanted)} secrets present")
+
+
+def _provider(settings: Settings) -> dict[str, Any]:
+    """Which writer will actually run today."""
+
+    from mpvf.generation.cloud import CloudCredentials
+    from mpvf.generation.provider import DeterministicProvider, FallbackProvider, build_provider
+
+    provider = build_provider(
+        settings.provider, credentials=CloudCredentials.load(settings.secrets_dir)
+    )
+
+    def describe(item: Any) -> str:
+        if isinstance(item, FallbackProvider):
+            return f"{describe(item.primary)} -> {describe(item.secondary)}"
+        return f"{item.name}:{item.model}"
+
+    chain = describe(provider)
+    if isinstance(provider, DeterministicProvider):
+        if settings.provider.kind == "deterministic":
+            return _check("model provider", "ok", "deterministic writer by configuration")
+        return _check(
+            "model provider",
+            "fail" if settings.provider.fallback != "deterministic" else "warn",
+            f"'{settings.provider.kind}' is not configured; the deterministic writer will be used",
+            settings.provider.fallback != "deterministic",
+        )
+    return _check("model provider", "ok", chain)
+
+
+def _ollama(settings: Settings) -> dict[str, Any]:
+    if settings.provider.kind != "ollama" and settings.provider.secondary_kind != "ollama":
+        return _check("ollama", "ok", "not used", required=False)
     from mpvf.generation.provider import OllamaProvider
 
     provider = OllamaProvider(settings.provider.model, settings.provider.host)
     if provider.available():
-        return _check("model provider", "ok", f"ollama has {settings.provider.model}")
+        return _check("ollama", "ok", f"has {settings.provider.model}")
     detail = (
         f"ollama at {settings.provider.host} does not have {settings.provider.model}; "
-        "the deterministic writer will be used instead"
+        "the next provider in the chain will be used"
     )
-    required = settings.provider.fallback != "deterministic"
-    return _check("model provider", "fail" if required else "warn", detail, required)
+    return _check("ollama", "warn", detail, required=False)
 
 
 def _kokoro(settings: Settings) -> dict[str, Any]:
-    if settings.speech.engine != "kokoro":
-        return _check("tts", "warn", f"engine is '{settings.speech.engine}'", required=False)
-    try:
-        import kokoro  # noqa: F401
-    except ImportError:
+    """The TTS engine that will actually be used, after credential resolution."""
+
+    from mpvf.speech.tts import SilentEngine, build_engine
+
+    engine = build_engine(settings.speech, ffmpeg_binary=settings.render.ffmpeg_binary)
+    if isinstance(engine, SilentEngine):
         return _check(
             "tts",
             "fail",
-            "kokoro not installed; narration would be silent. install the 'speech' extra",
+            f"'{settings.speech.engine}' is unavailable; narration would be silent and QA "
+            "would refuse to publish it",
         )
-    return _check("tts", "ok", f"kokoro voice {settings.speech.voice}")
+    detail = (
+        f"{engine.name} ({settings.speech.model})" if engine.name == "workers-ai" else engine.name
+    )
+    return _check("tts", "ok", detail)
 
 
 def _aligner(settings: Settings) -> dict[str, Any]:
-    if settings.speech.aligner != "faster_whisper":
-        return _check("caption alignment", "ok", "alignment disabled", required=False)
+    """Without a transcriber the §13.4 similarity gate cannot run."""
+
+    if settings.speech.aligner == "none":
+        return _check(
+            "transcript check", "warn", "disabled; narration will not be verified", required=False
+        )
+    if settings.speech.aligner == "cloudflare":
+        from mpvf.generation.cloud import CloudCredentials
+
+        credentials = CloudCredentials.load(settings.secrets_dir)
+        if credentials.cloudflare_account_id and credentials.cloudflare_api_token:
+            return _check("transcript check", "ok", f"workers-ai {settings.speech.alignment_model}")
+        return _check(
+            "transcript check",
+            "warn",
+            "no Cloudflare credentials; the transcript gate will be skipped",
+            required=False,
+        )
     try:
         import faster_whisper  # noqa: F401
     except ImportError:
         return _check(
-            "caption alignment",
+            "transcript check",
             "warn",
-            "faster-whisper not installed; caption timing will not be verified",
+            "faster-whisper not installed; the transcript gate will be skipped",
             required=False,
         )
-    return _check("caption alignment", "ok", f"faster-whisper {settings.speech.alignment_model}")
+    return _check("transcript check", "ok", f"faster-whisper {settings.speech.alignment_model}")
 
 
 def _rasterizer() -> dict[str, Any]:
@@ -265,6 +340,8 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
         _binary("ffmpeg", settings.render.ffmpeg_binary),
         _binary("ffprobe", settings.render.ffprobe_binary),
         _playwright(),
+        _cloud_credentials(settings),
+        _provider(settings),
         _ollama(settings),
         _kokoro(settings),
         _aligner(settings),

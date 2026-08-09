@@ -7,6 +7,7 @@ templates, pronunciation entries and the verification-domain allow list.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import yaml
 
@@ -86,7 +87,7 @@ portals:
 blocked: []
 """
 
-COASTAL_TEMPLATE = {
+COASTAL_TEMPLATE: dict[str, Any] = {
     "version": 1,
     "slug": "coastal-under-1m",
     "name": "Five Stunning Maine Coastal Homes Under $1M",
@@ -150,7 +151,15 @@ COASTAL_TEMPLATE = {
     "design": {"palette": "coastal", "map_style": "chart", "music_family": "warm_acoustic"},
 }
 
-OCEANFRONT_TEMPLATE = {
+
+def _section(name: str, **changes: Any) -> dict[str, Any]:
+    """Copy one section of the coastal template with a few values changed."""
+
+    base = cast(dict[str, Any], COASTAL_TEMPLATE[name])
+    return {**base, **changes}
+
+
+OCEANFRONT_TEMPLATE: dict[str, Any] = {
     **COASTAL_TEMPLATE,
     "slug": "oceanfront-now",
     "name": "Five Maine Oceanfront Homes You Can Buy Right Now",
@@ -158,12 +167,12 @@ OCEANFRONT_TEMPLATE = {
     "schedule": "0 5 * * 2",
     "fallback_template": None,
     "title_patterns": ["{count} Maine Oceanfront Homes You Can Buy Right Now"],
-    "hard_filters": {**COASTAL_TEMPLATE["hard_filters"], "price_max": 2500000},
+    "hard_filters": _section("hard_filters", price_max=2500000),
     "theme_rules": {"any_of": ["owned_ocean_frontage", "owned_frontage_measured"]},
-    "publishing": {**COASTAL_TEMPLATE["publishing"], "playlist": "Maine Oceanfront"},
+    "publishing": _section("publishing", playlist="Maine Oceanfront"),
 }
 
-LAKE_TEMPLATE = {
+LAKE_TEMPLATE: dict[str, Any] = {
     **COASTAL_TEMPLATE,
     "slug": "lake-under-750k",
     "name": "Five Beautiful Maine Lake Homes Under $750,000",
@@ -177,13 +186,13 @@ LAKE_TEMPLATE = {
         "max_pages": 4,
         "fallback_adapters": ["fixture"],
     },
-    "hard_filters": {**COASTAL_TEMPLATE["hard_filters"], "price_max": 749999},
+    "hard_filters": _section("hard_filters", price_max=749999),
     "theme_rules": {"any_of": ["lake_frontage", "named_lake", "deeded_beach_access"]},
-    "publishing": {**COASTAL_TEMPLATE["publishing"], "playlist": "Maine Lake Homes"},
+    "publishing": _section("publishing", playlist="Maine Lake Homes"),
     "design": {"palette": "mountain", "map_style": "chart", "music_family": "warm_acoustic"},
 }
 
-SKI_TEMPLATE = {
+SKI_TEMPLATE: dict[str, Any] = {
     **COASTAL_TEMPLATE,
     "slug": "ski-mountain",
     "name": "Five Maine Mountain Homes Near the Ski Slopes",
@@ -197,13 +206,13 @@ SKI_TEMPLATE = {
         "max_pages": 3,
         "fallback_adapters": ["fixture"],
     },
-    "hard_filters": {**COASTAL_TEMPLATE["hard_filters"], "price_max": 1500000},
+    "hard_filters": _section("hard_filters", price_max=1500000),
     "theme_rules": {"any_of": ["ski_area_proximity"]},
-    "publishing": {**COASTAL_TEMPLATE["publishing"], "playlist": "Maine Mountain Homes"},
+    "publishing": _section("publishing", playlist="Maine Mountain Homes"),
     "design": {"palette": "mountain", "map_style": "topographic", "music_family": "warm_acoustic"},
 }
 
-HISTORIC_TEMPLATE = {
+HISTORIC_TEMPLATE: dict[str, Any] = {
     **COASTAL_TEMPLATE,
     "slug": "historic-maine",
     "name": "Five Historic Maine Homes Full of Original Character",
@@ -218,17 +227,13 @@ HISTORIC_TEMPLATE = {
         "max_pages": 4,
         "fallback_adapters": ["fixture"],
     },
-    "hard_filters": {
-        **COASTAL_TEMPLATE["hard_filters"],
-        "price_max": 1200000,
-        "max_year_built": 1899,
-    },
+    "hard_filters": _section("hard_filters", price_max=1200000, max_year_built=1899),
     "theme_rules": {"any_of": ["pre_1900", "historic_character"]},
-    "publishing": {**COASTAL_TEMPLATE["publishing"], "playlist": "Historic Maine Homes"},
+    "publishing": _section("publishing", playlist="Historic Maine Homes"),
     "design": {"palette": "historic", "map_style": "chart", "music_family": "chamber"},
 }
 
-CAMPS_TEMPLATE = {
+CAMPS_TEMPLATE: dict[str, Any] = {
     **COASTAL_TEMPLATE,
     "slug": "camps-under-500k",
     "name": "Five Maine Hunting and Fishing Camps Under $500,000",
@@ -242,18 +247,18 @@ CAMPS_TEMPLATE = {
         "max_pages": 3,
         "fallback_adapters": ["fixture"],
     },
-    "hard_filters": {
-        **COASTAL_TEMPLATE["hard_filters"],
-        "price_max": 499999,
-        "min_usable_images": 6,
-        "property_types": ["single_family", "seasonal_residence"],
-    },
+    "hard_filters": _section(
+        "hard_filters",
+        price_max=499999,
+        min_usable_images=6,
+        property_types=["single_family", "seasonal_residence"],
+    ),
     "theme_rules": {"any_of": ["acreage", "sporting_access", "seasonal_camp", "lake_frontage"]},
-    "publishing": {**COASTAL_TEMPLATE["publishing"], "playlist": "Maine Camps"},
+    "publishing": _section("publishing", playlist="Maine Camps"),
     "design": {"palette": "mountain", "map_style": "topographic", "music_family": "warm_acoustic"},
 }
 
-UNIQUE_TEMPLATE = {
+UNIQUE_TEMPLATE: dict[str, Any] = {
     **COASTAL_TEMPLATE,
     "slug": "unique-maine",
     "name": "Five Wildly Unique Maine Homes on the Market",
@@ -267,9 +272,9 @@ UNIQUE_TEMPLATE = {
         "max_pages": 4,
         "fallback_adapters": ["fixture"],
     },
-    "hard_filters": {**COASTAL_TEMPLATE["hard_filters"], "price_max": 2000000},
+    "hard_filters": _section("hard_filters", price_max=2000000),
     "theme_rules": {"any_of": ["unique_property", "island_location", "large_acreage"]},
-    "publishing": {**COASTAL_TEMPLATE["publishing"], "playlist": "Unique Maine Properties"},
+    "publishing": _section("publishing", playlist="Unique Maine Properties"),
 }
 
 TEMPLATES = (

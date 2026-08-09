@@ -412,7 +412,7 @@ def score_entertainment(script: Script, bundle: EvidenceBundle) -> tuple[float, 
     if cold_open:
         towns = {p.town.lower() for p in bundle.properties}
         mentioned = [town for town in towns if town and town in cold_open.lower()]
-        signal_words = set()
+        signal_words: set[str] = set()
         for candidate in bundle.candidates:
             signal_words.update(signal.replace("_", " ") for signal in candidate.theme_signals)
         promised = [word for word in signal_words if word in cold_open.lower()]

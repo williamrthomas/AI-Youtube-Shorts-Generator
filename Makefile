@@ -2,7 +2,7 @@
 PY ?= .venv/bin/python
 UV ?= uv
 
-.PHONY: help setup install test lint fmt typecheck doctor init run preview serve clean check
+.PHONY: help setup install test lint fmt typecheck doctor init run preview serve clean check migrate migration db-check
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "};{printf "  %-12s %s\n",$$1,$$2}'
@@ -29,6 +29,15 @@ typecheck: ## mypy
 	$(PY) -m mypy
 
 check: lint typecheck test ## everything CI runs
+
+migrate: ## apply pending database migrations
+	$(PY) -m mpvf.cli.main db upgrade
+
+migration: ## NAME="describe the change" make migration — autogenerate a revision
+	MPVF_DB_URL="sqlite:///$(PWD)/data/mpvf.sqlite3" PYTHONPATH=src $(PY) -m alembic revision --autogenerate -m "$(NAME)"
+
+db-check: ## fail if the models and the migrated schema have drifted
+	$(PY) -m mpvf.cli.main db check
 
 doctor: ## verify runtime dependencies
 	$(PY) -m mpvf.cli.main doctor

@@ -1353,6 +1353,26 @@ def _persist_publication(
 # --------------------------------------------------------------------------
 
 
+# Outcomes that mean "today's pool could not fill a lineup" — the only
+# condition a fallback template is allowed to answer (§5.3, §14). A weak script
+# or a render failure is not a pool problem and never triggers a fallback.
+POOL_EXHAUSTION_CODES = frozenset(
+    {
+        "no_listings_discovered",
+        "insufficient_candidates",
+        "insufficient_verified",
+        "insufficient_assets",
+        "lineup_below_quality_floor",
+    }
+)
+
+
+def _pool_exhausted(summary: dict[str, Any]) -> bool:
+    if summary.get("outcome") not in {"failed", "skipped"}:
+        return False
+    return summary.get("code") in POOL_EXHAUSTION_CODES
+
+
 class Runner:
     """Creates runs, executes stages, and owns every state transition."""
 
@@ -1437,22 +1457,105 @@ class Runner:
                 self._mark_skipped(run_id, skip)
                 context.logger.bind(spec.name).warning(skip.code, skip.message, **skip.detail)
                 summary["outcome"] = "skipped"
+                summary["code"] = skip.code
+                summary["stage"] = spec.name
                 summary["reason"] = skip.message
                 summary["detail"] = skip.detail
+                summary["artifact_dir"] = str(store.root)
                 return summary
             except StageError as error:
                 self._mark_failed(run_id, spec, error)
                 context.logger.bind(spec.name).error(error.code, error.message, **error.detail)
                 summary["outcome"] = "failed"
+                summary["code"] = error.code
+                summary["stage"] = spec.name
                 summary["failed_stage"] = spec.name
                 summary["reason"] = error.message
                 summary["detail"] = error.as_dict()
+                summary["artifact_dir"] = str(store.root)
                 return summary
 
         self._advance(run_id, RunState.ARCHIVED, force=True)
         summary["outcome"] = "completed"
         summary["artifact_dir"] = str(store.root)
         return summary
+
+    def run_episode(
+        self,
+        template_slug: str,
+        *,
+        use_fallback: bool = True,
+        max_fallback_depth: int = 2,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Run a template, falling back to its configured alternative (§5.3).
+
+        The fallback runs its *own* criteria in a fresh run. The primary's
+        essential rules are never quietly relaxed to force an episode out —
+        that is precisely what the specification forbids. If no fallback is
+        configured, or the fallback is exhausted too, the skip stands.
+        """
+
+        attempts: list[dict[str, Any]] = []
+        visited: list[str] = []
+        slug: str | None = template_slug
+
+        while slug is not None:
+            if slug in visited:
+                # A fallback loop (A → B → A) would otherwise run forever.
+                attempts.append(
+                    {
+                        "template": slug,
+                        "outcome": "not_attempted",
+                        "code": "fallback_cycle",
+                        "reason": f"fallback chain revisits {slug}",
+                    }
+                )
+                break
+
+            visited.append(slug)
+            summary = self.run(slug, **kwargs)
+            attempts.append(summary)
+
+            if not _pool_exhausted(summary):
+                break
+            if not use_fallback or len(visited) > max_fallback_depth:
+                break
+
+            template = self.templates.try_get(slug)
+            next_slug = template.fallback_template if template else None
+            if not next_slug:
+                break
+
+            if self.templates.try_get(next_slug) is None:
+                attempts.append(
+                    {
+                        "template": next_slug,
+                        "outcome": "not_attempted",
+                        "code": "unknown_fallback_template",
+                        "reason": f"{slug} names a fallback that does not exist: {next_slug}",
+                    }
+                )
+                break
+
+            self.logger_for(attempts[-1].get("run_id")).warning(
+                "fallback_template",
+                f"{slug} could not fill a lineup ({summary.get('code')}); trying {next_slug}",
+                primary=slug,
+                fallback=next_slug,
+            )
+            slug = next_slug
+
+        final = attempts[-1]
+        return {
+            **final,
+            "attempts": attempts,
+            "templates_tried": visited,
+            "used_fallback": len(visited) > 1,
+        }
+
+    def logger_for(self, run_id: str | None) -> RunLogger:
+        return RunLogger(run_id or "-", self.database)
 
     def _execute_stage(self, context: RunContext, spec: StageSpec) -> StageResult:
         started = time.perf_counter()

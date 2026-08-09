@@ -18,7 +18,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from mpvf.generation.provider import GenerationError, GenerationProvider, Message
-from mpvf.models.domain import Claim, PropertyRecord, SourceRecord
+from mpvf.models.domain import Claim, ClaimScope, PropertyRecord, SourceRecord
 from mpvf.normalization.address import fold_text
 from mpvf.research.sources import CapturedSource
 
@@ -273,7 +273,9 @@ def _tier_ceiling(captured: CapturedSource) -> float:
     return {"A": 0.98, "B": 0.9, "C": 0.75}.get(captured.record.reliability_tier, 0.4)
 
 
-def _enforce_scope(claimed_scope: str, record: PropertyRecord, captured: CapturedSource) -> str:
+def _enforce_scope(
+    claimed_scope: str, record: PropertyRecord, captured: CapturedSource
+) -> ClaimScope:
     """FR-065: a property-scoped claim needs a source that identifies the property."""
 
     scope = claimed_scope.strip().lower()

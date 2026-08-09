@@ -30,6 +30,42 @@ def _database(settings: Settings) -> dict[str, Any]:
     return _check("database", "ok", f"{len(tables)} tables at {settings.db_path}")
 
 
+def _migrations(settings: Settings) -> dict[str, Any]:
+    """Schema must be at head before a scheduled run touches it (§15.3)."""
+
+    from mpvf.models import migrations
+
+    state = migrations.state(settings)
+    if state.detail:
+        return _check("migrations", "warn", state.detail, required=False)
+    if state.current is None:
+        drift = migrations.schema_drift(settings)
+        hint = (
+            "run 'mpvf db upgrade' to adopt it"
+            if not drift
+            else f"it also differs from the models ({len(drift)} differences); back it up first"
+        )
+        return _check(
+            "migrations",
+            "fail",
+            f"database predates migration control (head {state.head}); {hint}",
+        )
+    if state.pending:
+        return _check(
+            "migrations",
+            "fail",
+            f"database at {state.current}, head is {state.head}; run 'mpvf db upgrade'",
+        )
+    drift = migrations.schema_drift(settings)
+    if drift:
+        return _check(
+            "migrations",
+            "fail",
+            f"{len(drift)} schema differences vs the models (e.g. {drift[0]})",
+        )
+    return _check("migrations", "ok", f"at head {state.current}, no drift")
+
+
 def _disk(settings: Settings) -> dict[str, Any]:
     try:
         settings.data_dir.mkdir(parents=True, exist_ok=True)
@@ -224,6 +260,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
     settings.ensure_directories()
     checks = [
         _database(settings),
+        _migrations(settings),
         _disk(settings),
         _binary("ffmpeg", settings.render.ffmpeg_binary),
         _binary("ffprobe", settings.render.ffprobe_binary),

@@ -30,6 +30,56 @@ duration. The dashboard's Today page shows the current run, the stage strip,
 blockers and the next action; every failed stage has a saved artifact and a
 copy-pasteable re-run command.
 
+## Fallback templates
+
+Each template may name a `fallback_template`. When the primary cannot fill a
+lineup — no listings, too few verified, too few images, or a lineup below the
+quality floor — `mpvf run` starts a **fresh run** using the fallback's own
+criteria and reports both attempts:
+
+```json
+{"outcome": "completed", "template": "oceanfront-now",
+ "templates_tried": ["coastal-under-1m", "oceanfront-now"], "used_fallback": true}
+```
+
+Two things it deliberately does *not* do:
+
+- It never relaxes the primary's filters to force an episode out. The fallback
+  runs its own rules, or the episode skips.
+- It never falls back on a *quality* failure. A script that fails the editorial
+  gate, a render error or a QA failure means the writing or the pipeline was at
+  fault, not the listings — a different template would not help.
+
+Use `--no-fallback` to run a single template, and `mpvf templates validate all`
+to catch a fallback that points at a missing template or loops back on itself.
+
+## Database migrations
+
+The schema is under Alembic. Every model change needs a migration.
+
+```bash
+mpvf db current       # applied revision, head, whether anything is pending
+mpvf db upgrade       # apply pending migrations
+mpvf db history       # list revisions, newest first
+mpvf db check         # fail if the models and the database have drifted
+```
+
+`mpvf init` upgrades automatically. A database created before migrations
+existed is *adopted*, not rebuilt: if its schema already matches the models it
+is stamped at head with your data intact; if it differs, the upgrade refuses
+and tells you, rather than guessing.
+
+To change the schema: edit the model, then
+
+```bash
+NAME="add whatever column" make migration   # autogenerate
+# read the generated file before committing it
+make migrate
+```
+
+`mpvf doctor` fails when the database is behind head or has drifted, so a
+scheduled run never starts against a stale schema.
+
 ## When a run fails or skips
 
 A **skip** is a success of the quality system, not an incident. Common ones:
@@ -38,7 +88,7 @@ A **skip** is a success of the quality system, not an incident. Common ones:
 |---|---|---|
 | `lineup_below_quality_floor` | today's listings are weak | nothing; or loosen the template deliberately |
 | `editorial_gate` | the script is repetitive or hype-heavy | read the subscores on the Script page |
-| `insufficient_candidates` | fewer than five eligible listings | let the fallback template run, or skip |
+| `insufficient_candidates` | fewer than five eligible listings | the fallback template runs automatically; if it also fails, skip |
 
 Failures worth acting on:
 

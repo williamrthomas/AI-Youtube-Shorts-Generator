@@ -44,11 +44,19 @@ class DiscoverySpec(BaseModel):
     fallback_adapters: list[str] = Field(default_factory=list)
 
 
+DEFAULT_ACTIVE_STATUSES: list[ListingStatus] = ["active"]
+DEFAULT_PROPERTY_TYPES: list[PropertyType] = ["single_family", "condo", "seasonal_residence"]
+DEFAULT_EXCLUDED_STATUSES: list[ListingStatus] = [
+    "pending",
+    "contingent",
+    "sold",
+    "off_market",
+]
+
+
 class HardFilters(BaseModel):
-    status: list[ListingStatus] = Field(default_factory=lambda: ["active"])
-    property_types: list[PropertyType] = Field(
-        default_factory=lambda: ["single_family", "condo", "seasonal_residence"]
-    )
+    status: list[ListingStatus] = Field(default_factory=lambda: list(DEFAULT_ACTIVE_STATUSES))
+    property_types: list[PropertyType] = Field(default_factory=lambda: list(DEFAULT_PROPERTY_TYPES))
     price_min: int | None = None
     price_max: int | None = None
     state: str = "ME"
@@ -82,9 +90,7 @@ class ScoringWeights(BaseModel):
 
 
 class Exclusions(BaseModel):
-    statuses: list[ListingStatus] = Field(
-        default_factory=lambda: ["pending", "contingent", "sold", "off_market"]
-    )
+    statuses: list[ListingStatus] = Field(default_factory=lambda: list(DEFAULT_EXCLUDED_STATUSES))
     featured_within_days: int = 120
     reprise_price_change_pct: float = 10.0
     land_only: bool = True
@@ -210,3 +216,37 @@ class TemplateRegistry:
             return self.get(slug)
         except KeyError:
             return None
+
+    def fallback_chain(self, slug: str, max_depth: int = 6) -> list[str]:
+        """Follow ``fallback_template`` links, stopping at a cycle or a gap."""
+
+        by_slug = {template.slug: template for template in self.load_all()}
+        chain: list[str] = []
+        current: str | None = slug
+        while current and current not in chain and len(chain) < max_depth:
+            chain.append(current)
+            template = by_slug.get(current)
+            current = template.fallback_template if template else None
+        return chain
+
+    def chain_problems(self, slug: str) -> list[str]:
+        """Fallback misconfiguration an operator should hear about (FR-006)."""
+
+        by_slug = {template.slug: template for template in self.load_all()}
+        problems: list[str] = []
+        seen: list[str] = []
+        current: str | None = slug
+
+        while current:
+            if current in seen:
+                problems.append(f"fallback chain loops back to '{current}': {' -> '.join(seen)}")
+                break
+            seen.append(current)
+            template = by_slug.get(current)
+            if template is None:
+                problems.append(f"fallback target '{current}' does not exist")
+                break
+            if template.fallback_template and not template.enabled:
+                problems.append(f"'{current}' is disabled but is used as a fallback")
+            current = template.fallback_template
+        return problems

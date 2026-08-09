@@ -24,3 +24,4 @@ config/settings.yaml
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.alembic-scratch.sqlite3

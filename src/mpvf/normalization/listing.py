@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from mpvf.config.templates import ListingStatus, PropertyType
-from mpvf.models.domain import ListingObservation, WaterfrontFacts
+from mpvf.models.domain import FrontageType, ListingObservation, WaterfrontFacts
 
 _NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
 
@@ -230,7 +230,7 @@ def detect_waterfront(text: str | None, facts: dict[str, Any] | None = None) -> 
     return result
 
 
-_BODY_FRONTAGE = {
+_BODY_FRONTAGE: dict[str, FrontageType] = {
     "bay": "bay",
     "harbor": "bay",
     "cove": "bay",
@@ -245,7 +245,7 @@ _BODY_FRONTAGE = {
 }
 
 
-def _frontage_from_body(body_word: str) -> str:
+def _frontage_from_body(body_word: str) -> FrontageType:
     return _BODY_FRONTAGE.get(body_word, "unknown")
 
 

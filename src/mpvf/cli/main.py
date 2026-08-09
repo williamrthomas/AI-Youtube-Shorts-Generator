@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -26,6 +27,7 @@ script_app = typer.Typer(help="Script generation.")
 sources_app = typer.Typer(help="Source adapters.")
 youtube_app = typer.Typer(help="YouTube credentials and publishing.")
 run_app = typer.Typer(help="Run control.")
+db_app = typer.Typer(help="Database migrations.")
 
 app.add_typer(templates_app, name="templates")
 app.add_typer(render_app, name="render")
@@ -33,6 +35,7 @@ app.add_typer(script_app, name="script")
 app.add_typer(sources_app, name="sources")
 app.add_typer(youtube_app, name="youtube")
 app.add_typer(run_app, name="run-control")
+app.add_typer(db_app, name="db")
 
 
 def _settings(config: Path | None = None) -> Settings:
@@ -61,14 +64,25 @@ def init(
 
     settings = _settings(config)
     settings.ensure_directories()
-    database = Database(settings.database_url())
-    database.create_all()
 
     from mpvf.cli.scaffold import write_starter_config
+    from mpvf.models import migrations
+
+    try:
+        state = migrations.upgrade(settings)
+        schema_note = f"migrated to {state.current}"
+    except migrations.SchemaAdoptionRequired as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    except migrations.MigrationsUnavailable as exc:
+        # Without alembic we can still create a usable database; the operator
+        # is told plainly that it is not under migration control.
+        Database(settings.database_url()).create_all()
+        schema_note = f"created without migrations ({exc})"
 
     created = write_starter_config(settings, force=force)
     typer.echo(f"Data directory: {settings.data_dir.resolve()}")
-    typer.echo(f"Database:       {settings.db_path.resolve()}")
+    typer.echo(f"Database:       {settings.db_path.resolve()} — {schema_note}")
     for path in created:
         typer.echo(f"Created:        {path}")
     typer.echo("\nNext: review config/templates, then run 'mpvf doctor'.")
@@ -126,6 +140,7 @@ def templates_validate(
     failures = 0
     for template in templates:
         problems = template.validation_report()
+        problems.extend(registry_.chain_problems(template.slug))
         if problems:
             failures += 1
             typer.echo(f"{template.slug}:")
@@ -168,6 +183,11 @@ def run_command(
     mode: str | None = typer.Option(None, help="review|private_upload|scheduled|full_auto"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Plan the render without encoding"),
     fixture_dir: Path | None = typer.Option(None, help="Run against saved fixtures"),
+    fallback: bool = typer.Option(
+        True,
+        "--fallback/--no-fallback",
+        help="On an exhausted candidate pool, try the template's configured fallback",
+    ),
     config: Path | None = typer.Option(None),
 ) -> None:
     """Execute the pipeline for a template."""
@@ -177,16 +197,28 @@ def run_command(
     if fixture_dir:
         overrides["fixture_dir"] = fixture_dir
         overrides["verification_adapter"] = "fixture"
-    summary = _runner(config).run(
-        template,
-        from_stage=from_stage,
-        to_stage=to_stage,
-        run_id=run_id,
-        mode=mode,
-        dry_run=dry_run,
-        context_overrides=overrides,
-    )
+
+    runner = _runner(config)
+    kwargs: dict[str, Any] = {
+        "from_stage": from_stage,
+        "to_stage": to_stage,
+        "run_id": run_id,
+        "mode": mode,
+        "dry_run": dry_run,
+        "context_overrides": overrides,
+    }
+    # Resuming a specific run targets that run; a fallback there would be wrong.
+    if run_id or not fallback:
+        summary = runner.run(template, **kwargs)
+    else:
+        summary = runner.run_episode(template, use_fallback=True, **kwargs)
+
     _echo_json(summary)
+    if summary.get("used_fallback"):
+        typer.echo(
+            f"(primary template exhausted; fell back through {' → '.join(summary['templates_tried'])})",
+            err=True,
+        )
     raise typer.Exit(code=0 if summary.get("outcome") in {"completed", "skipped"} else 1)
 
 
@@ -410,6 +442,87 @@ def cleanup(
 
     report = run_cleanup(_settings(config), older_than, dry_run=dry_run)
     _echo_json(report)
+
+
+@db_app.command("upgrade")
+def db_upgrade(
+    revision: str = typer.Argument("head", help="Target revision"),
+    config: Path | None = typer.Option(None),
+) -> None:
+    """Apply pending migrations."""
+
+    from mpvf.models import migrations
+
+    settings = _settings(config)
+    try:
+        state = migrations.upgrade(settings, revision)
+    except (migrations.MigrationsUnavailable, migrations.SchemaAdoptionRequired) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"database at {state.current} (head {state.head})")
+
+
+@db_app.command("current")
+def db_current(config: Path | None = typer.Option(None)) -> None:
+    """Show the applied revision and whether migrations are pending."""
+
+    from mpvf.models import migrations
+
+    settings = _settings(config)
+    state = migrations.state(settings)
+    _echo_json(
+        {
+            "current": state.current,
+            "head": state.head,
+            "pending": state.pending,
+            "up_to_date": state.up_to_date,
+            "detail": state.detail,
+        }
+    )
+    raise typer.Exit(code=0 if state.up_to_date else 1)
+
+
+@db_app.command("history")
+def db_history(config: Path | None = typer.Option(None)) -> None:
+    """List migrations, newest first."""
+
+    from mpvf.models import migrations
+
+    for item in migrations.history(_settings(config)):
+        marker = "*" if item["is_head"] else " "
+        typer.echo(f"{marker} {item['revision']:<18} {(item['message'] or '').splitlines()[0]}")
+
+
+@db_app.command("stamp")
+def db_stamp(
+    revision: str = typer.Argument("head"),
+    config: Path | None = typer.Option(None),
+) -> None:
+    """Mark an existing database as being at a revision without running it."""
+
+    from mpvf.models import migrations
+
+    state = migrations.stamp(_settings(config), revision)
+    typer.echo(f"stamped at {state.current}")
+
+
+@db_app.command("check")
+def db_check(config: Path | None = typer.Option(None)) -> None:
+    """Fail if the models and the migrated database have drifted apart."""
+
+    from mpvf.models import migrations
+
+    problems = migrations.schema_drift(_settings(config))
+    if not problems:
+        typer.echo("no drift: the database matches the models")
+        raise typer.Exit(code=0)
+    for problem in problems:
+        typer.echo(f"- {problem}", err=True)
+    typer.echo(
+        '\nGenerate a migration with:\n  alembic revision --autogenerate -m "describe the change"',
+        err=True,
+    )
+    raise typer.Exit(code=1)
 
 
 @app.command()

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import random
-from typing import Any
+from typing import Any, cast
 
 from mpvf.config.templates import SearchTemplate
 from mpvf.evidence.bundle import writer_view
@@ -24,6 +24,7 @@ from mpvf.models.domain import (
     Claim,
     EvidenceBundle,
     OnScreenText,
+    OverlayKind,
     Script,
     ScriptSegment,
     SegmentType,
@@ -213,16 +214,22 @@ def _inject_structured_facts(text: str, property_key: str | None, bundle: Eviden
     return re.sub(pattern, verified, text, flags=re.IGNORECASE)
 
 
+_OVERLAY_KINDS: frozenset[str] = frozenset(
+    {"chapter_card", "callout", "credit", "disclosure", "lower_third"}
+)
+
+
+def _overlay_kind(value: str) -> OverlayKind:
+    """A model-supplied overlay kind, narrowed to the ones the renderer draws."""
+
+    return cast(OverlayKind, value) if value in _OVERLAY_KINDS else "callout"
+
+
 def _on_screen(
     draft_segment: DraftSegment, property_key: str | None, bundle: EvidenceBundle
 ) -> list[OnScreenText]:
     overlays = [
-        OnScreenText(
-            kind=item.kind
-            if item.kind in {"chapter_card", "callout", "credit", "disclosure", "lower_third"}
-            else "callout",
-            text=item.text,
-        )
+        OnScreenText(kind=_overlay_kind(item.kind), text=item.text)
         for item in draft_segment.on_screen_text
     ]
     if property_key:

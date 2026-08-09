@@ -22,6 +22,7 @@ first-class outcome.
 | A material conflict blocks a candidate; it is never averaged away | `selection/verification.py` |
 | Access challenges are reported, never bypassed | `adapters/zillow/adapter.py`, `adapters/zillow/parser.py` |
 | A weak lineup or a weak script skips the episode | `pipeline/stages.py::SkipEpisode` |
+| An exhausted pool tries the fallback template — never a relaxed primary | `pipeline/runner.py::run_episode` |
 | Layout, typography, timing and safe margins are code, not per-episode whim | `render/design.py`, `render/scene_plan.py` |
 
 ---
@@ -31,12 +32,15 @@ first-class outcome.
 ```bash
 uv venv && uv pip install -e ".[dev]"
 
-mpvf init            # data dirs, database, starter templates, pronunciation lexicon
+mpvf init            # data dirs, migrated database, starter templates, lexicon
 mpvf doctor          # check ffmpeg, playwright, ollama, kokoro, rasterizer, credentials
 mpvf templates list
 mpvf run coastal-under-1m --dry-run
 mpvf serve           # dashboard on http://127.0.0.1:8765
 ```
+
+The schema is under Alembic; `mpvf db current` shows the applied revision and
+`mpvf db check` fails if the models and the database have drifted apart.
 
 `mpvf doctor` is the gate: it tells you exactly which optional component is
 missing and what degrades without it. Nothing in the pipeline crashes because
@@ -59,6 +63,12 @@ mpvf run coastal-under-1m --fixture-dir tests/fixtures/listings --dry-run
 discover → normalize → verify → select → assets → research → evidence
         → script → narrate → render → qa → publish
 ```
+
+When today's pool cannot fill a lineup, the run does not simply stop: it starts
+a fresh run under the template's configured `fallback_template`, with that
+template's own criteria. The primary's rules are never loosened to force an
+episode out, and a *quality* failure (bad script, failed QA) never triggers a
+fallback — a different template would not fix bad writing.
 
 Each stage reads from the run's artifact directory, writes exactly one
 artifact, and can be re-run alone:
@@ -94,6 +104,7 @@ src/mpvf/
   web/           FastAPI + Jinja dashboard
   cli/           Typer commands, doctor, scaffolding, retention cleanup
 config/          settings, templates, pronunciation, verification domains
+migrations/      Alembic environment and versioned schema revisions
 tests/           unit + adapter fixture + offline end-to-end
 docs/            architecture, operator guide, source adapters, video design
 ```

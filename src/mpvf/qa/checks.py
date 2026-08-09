@@ -432,7 +432,7 @@ def technical_checks(
     streams = probe.get("streams", [])
     if not any(stream.get("codec_type") == "audio" for stream in streams):
         findings.append(_finding("no_audio_stream", "technical", "master contains no audio stream"))
-    audio = next((s for s in streams if s.get("codec_type") == "audio"), {})
+    audio: dict[str, Any] = next((s for s in streams if s.get("codec_type") == "audio"), {})
     if audio:
         rate = int(audio.get("sample_rate", 0) or 0)
         if rate and rate != settings.audio_sample_rate:

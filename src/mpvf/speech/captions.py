@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from mpvf.models.domain import CaptionCue, NarrationSegment, ScriptSegment
 
@@ -228,7 +229,7 @@ class WhisperAligner:
 
     def __init__(self, model_name: str = "base.en") -> None:
         self.model_name = model_name
-        self._model = None
+        self._model: Any = None
 
     def available(self) -> bool:
         try:

@@ -7,6 +7,7 @@ validated here so a bad upstream value fails loudly at the seam.
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import uuid
 from datetime import UTC, datetime
@@ -69,10 +70,15 @@ class RawListingPage(BaseModel):
     captured_at: datetime = Field(default_factory=utcnow)
 
 
+FrontageType = Literal["ocean", "lake", "river", "pond", "bay", "none", "unknown"]
+ClaimScope = Literal["property", "town", "region"]
+OverlayKind = Literal["chapter_card", "callout", "credit", "disclosure", "lower_third"]
+
+
 class WaterfrontFacts(BaseModel):
     owned_frontage_feet: float | None = None
     water_body: str | None = None
-    frontage_type: Literal["ocean", "lake", "river", "pond", "bay", "none", "unknown"] = "unknown"
+    frontage_type: FrontageType = "unknown"
     deeded_access: bool | None = None
     water_view: bool | None = None
 
@@ -208,7 +214,9 @@ class Candidate(BaseModel):
     exclusion_reason: str | None = None
     manual_lock: bool = False
 
-    @property
+    # This model has a field named `property`, which hides the builtin from a
+    # type checker reading the class body. `builtins.property` is unambiguous.
+    @builtins.property
     def property_key(self) -> str:
         return self.property.property_key
 
@@ -265,7 +273,7 @@ class Claim(BaseModel):
     confidence: float = 0.5
     eligible_for_script: bool = True
     conflict_state: Literal["none", "conflicting", "resolved", "unresolved"] = "none"
-    scope: Literal["property", "town", "region"] = "property"
+    scope: ClaimScope = "property"
     note: str = ""
 
     def fingerprint(self) -> str:
@@ -412,7 +420,7 @@ SegmentType = Literal[
 
 
 class OnScreenText(BaseModel):
-    kind: Literal["chapter_card", "callout", "credit", "disclosure", "lower_third"] = "callout"
+    kind: OverlayKind = "callout"
     text: str
     start_offset: float = 0.0
     duration: float = 3.0

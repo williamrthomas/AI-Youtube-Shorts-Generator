@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Run {{ run.id | shortid }}</h1>
+{% include "_runnav.html" %}
+
+<div class="card">
+  <strong>{{ run.template_slug }}</strong> v{{ run.template_version }}
+  <span class="pill {{ 'fail' if run.failure_code else 'ok' }}">{{ run.state }}</span>
+  <p class="muted">{{ run.artifact_dir }}</p>
+  {% if run.failure_detail %}<div class="banner fail">{{ run.failure_code }}: {{ run.failure_detail }}</div>{% endif %}
+</div>
+
+<h2>Stages</h2>
+<table>
+  <tr><th>Stage</th><th>State</th><th>Attempt</th><th class="num">Duration</th><th>Error</th></tr>
+  {% for stage in stages %}
+    <tr>
+      <td>{{ stage.name }}</td>
+      <td><span class="pill {{ 'fail' if stage.state == 'failed' else ('ok' if stage.state == 'complete' else 'warn') }}">{{ stage.state }}</span></td>
+      <td>{{ stage.attempt }}</td>
+      <td class="num">{{ '%.2f'|format(stage.duration_seconds) if stage.duration_seconds else '' }}</td>
+      <td class="muted">{{ stage.error_detail or '' }}</td>
+    </tr>
+  {% endfor %}
+</table>
+
+{% if repairs %}
+<h2>Repair tasks</h2>
+<table>
+  <tr><th>Check</th><th>Category</th><th>Stage to re-run</th><th class="num">Count</th><th>Example</th></tr>
+  {% for task in repairs %}
+    <tr>
+      <td>{{ task.check }}</td><td>{{ task.category }}</td>
+      <td><code>mpvf run {{ run.template_slug }} --run-id {{ run.id }} --from-stage {{ task.stage }}</code></td>
+      <td class="num">{{ task.count }}</td>
+      <td class="muted">{{ task.examples[0] if task.examples else '' }}</td>
+    </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Events</h2>
+<table>
+  <tr><th>Time</th><th>Stage</th><th>Code</th><th>Message</th></tr>
+  {% for event in events %}
+    <tr>
+      <td class="muted">{{ event.created_at.strftime('%H:%M:%S') }}</td>
+      <td>{{ event.stage or '' }}</td>
+      <td>{{ event.code }}</td>
+      <td>{{ event.message }}</td>
+    </tr>
+  {% endfor %}
+</table>
+{% endblock %}

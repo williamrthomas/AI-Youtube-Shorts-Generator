@@ -1,0 +1,65 @@
+version: 1
+slug: unique-maine
+name: Five Wildly Unique Maine Homes on the Market
+enabled: true
+editorial_promise: Converted, unusual, and architect-designed Maine properties
+schedule: 0 5 * * 6
+result_count: 5
+alternates_count: 1
+target_runtime_seconds: 420
+target_words: 980
+word_range:
+- 850
+- 1100
+max_segment_words: 140
+fallback_template: null
+min_candidate_quality: 60
+title_patterns:
+- '{count} Wildly Unique Maine Homes on the Market'
+discovery:
+  adapter: zillow
+  search_urls:
+  - https://www.zillow.com/me/unique-homes/
+  max_pages: 4
+  fallback_adapters:
+  - fixture
+hard_filters:
+  status:
+  - active
+  property_types:
+  - single_family
+  - condo
+  - seasonal_residence
+  price_max: 2000000
+  state: ME
+  min_usable_images: 8
+theme_rules:
+  any_of:
+  - unique_property
+  - island_location
+  - large_acreage
+scoring:
+  theme_fit: 25
+  visual_strength: 25
+  story_value: 15
+  evidence_quality: 15
+  freshness: 10
+  geographic_diversity: 5
+  asset_completeness: 5
+exclusions:
+  statuses:
+  - pending
+  - contingent
+  - sold
+  - off_market
+  featured_within_days: 120
+  land_only: true
+  auction: true
+publishing:
+  playlist: Unique Maine Properties
+  privacy: private
+  earliest_publish_hour: 17
+design:
+  palette: coastal
+  map_style: chart
+  music_family: warm_acoustic

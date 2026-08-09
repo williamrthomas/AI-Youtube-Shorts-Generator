@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Script</h1>
+{% include "_runnav.html" %}
+<div class="card">
+  <span class="pill {{ 'ok' if validation.factual_passed else 'fail' }}">facts {{ 'passed' if validation.factual_passed else 'failed' }}</span>
+  <span class="pill {{ 'ok' if validation.editorial_passed else 'fail' }}">editorial {{ '%.1f'|format(validation.editorial_scores.total or 0) }}</span>
+  <span class="muted">{{ script.segments | length }} segments</span>
+</div>
+
+{% if validation.findings %}
+<h2>Findings</h2>
+<table>
+  <tr><th>Check</th><th>Category</th><th>Severity</th><th>Message</th></tr>
+  {% for finding in validation.findings %}
+    <tr>
+      <td>{{ finding.check }}</td><td>{{ finding.category }}</td>
+      <td><span class="pill {{ 'fail' if finding.severity == 'error' else 'warn' }}">{{ finding.severity }}</span></td>
+      <td>{{ finding.message }}</td>
+    </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Segments</h2>
+{% for segment in script.segments %}
+  <div class="segment {{ 'failed' if segment.validation_state == 'failed' else '' }}">
+    <strong>{{ segment.type }}{% if segment.rank %} · #{{ segment.rank }}{% endif %}</strong>
+    <span class="muted">{{ segment.spoken_text.split() | length }} words · {{ '%.1f'|format(segment.estimated_seconds) }}s{% if segment.locked %} · locked{% endif %}</span>
+    <p>{{ segment.spoken_text }}</p>
+    {% if segment.evidence_refs %}<p class="muted">Evidence: {{ segment.evidence_refs | join(', ') }}</p>{% endif %}
+  </div>
+{% endfor %}
+{% endblock %}

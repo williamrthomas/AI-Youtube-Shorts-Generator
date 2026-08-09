@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Settings</h1>
+<p class="sub">Health checks, adapters and templates. Credentials are never displayed.</p>
+
+<h2>Health</h2>
+<table>
+  <tr><th>Check</th><th>Status</th><th>Detail</th></tr>
+  {% for check in doctor.checks %}
+    <tr>
+      <td>{{ check.name }}</td>
+      <td><span class="pill {{ 'ok' if check.status == 'ok' else ('warn' if check.status == 'warn' else 'fail') }}">{{ check.status }}</span></td>
+      <td class="muted">{{ check.detail }}</td>
+    </tr>
+  {% endfor %}
+</table>
+
+<h2>Templates</h2>
+<table>
+  <tr><th>Slug</th><th>Name</th><th>Enabled</th><th class="num">Results</th><th>Fallback</th><th>Playlist</th></tr>
+  {% for template in templates_list %}
+    <tr>
+      <td>{{ template.slug }}</td><td>{{ template.name }}</td>
+      <td>{{ 'yes' if template.enabled else 'no' }}</td>
+      <td class="num">{{ template.result_count }}</td>
+      <td class="muted">{{ template.fallback_template or '—' }}</td>
+      <td class="muted">{{ template.publishing.playlist }}</td>
+    </tr>
+  {% endfor %}
+</table>
+
+<h2>Runtime</h2>
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>publishing mode</td><td>{{ settings.publishing_mode }}</td></tr>
+  <tr><td>generation provider</td><td>{{ settings.provider.kind }} / {{ settings.provider.model }}</td></tr>
+  <tr><td>tts</td><td>{{ settings.speech.engine }} / {{ settings.speech.voice }}</td></tr>
+  <tr><td>render</td><td>{{ settings.render.width }}x{{ settings.render.height }} @ {{ settings.render.fps }}fps</td></tr>
+  <tr><td>editorial gate</td><td>{{ settings.gates.editorial_pass_score }}</td></tr>
+  <tr><td>data dir</td><td>{{ settings.data_dir }}</td></tr>
+</table>
+{% endblock %}

@@ -14,3 +14,13 @@ venv/
 
 # Environment variables
 .env
+
+# MPVF
+data/
+secrets/
+browser-profile/
+config/settings.yaml
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

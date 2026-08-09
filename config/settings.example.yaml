@@ -1,0 +1,49 @@
+# Maine Property Video Factory settings.
+# Copy to config/settings.yaml and edit. Secrets never belong in this file.
+
+data_dir: data
+secrets_dir: secrets
+templates_dir: config/templates
+pronunciation_path: config/pronunciation.yaml
+source_domains_path: config/source-domains.yaml
+
+timezone: America/New_York
+# review | private_upload | scheduled | full_auto
+# Keep private_upload until the twenty-run pilot passes (§4.3).
+publishing_mode: private_upload
+earliest_publish_hour: 17
+
+provider:
+  kind: ollama            # ollama | deterministic | openai_compatible
+  model: qwen2.5:14b-instruct
+  host: http://127.0.0.1:11434
+  temperature: 0.4
+  fallback: deterministic
+
+speech:
+  engine: kokoro
+  voice: af_heart
+  speed: 1.0
+  aligner: faster_whisper
+
+render:
+  width: 1920
+  height: 1080
+  fps: 30
+  video_crf: 18
+
+mix:
+  music_enabled: true
+  target_lufs: -14.0
+  true_peak_db: -1.0
+
+acquisition:
+  request_delay_seconds: 2.5
+  max_concurrency: 4
+
+gates:
+  editorial_pass_score: 82
+  min_candidate_quality: 60
+
+dashboard_host: 127.0.0.1
+dashboard_port: 8765

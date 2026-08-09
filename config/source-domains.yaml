@@ -1,0 +1,20 @@
+# Verification-source allow list (§11.3).
+# Only these hosts are fetched for verification. Add the brokerages that
+# actually list in your target regions; keep the list small and deliberate.
+
+brokerages:
+  - legacysir.com
+  - landvest.com
+  - bhhsnewengland.com
+  - kw.com
+  - remax.com
+  - cbrealty.com
+  - betterhomesmaine.com
+  - swanagency.com
+  - tworiversmaine.com
+
+portals:
+  - realtor.com
+  - redfin.com
+
+blocked: []

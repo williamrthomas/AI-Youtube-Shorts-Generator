@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Today</h1>
+<p class="sub">Current run, blockers and what to do next.</p>
+
+{% if current %}
+  <div class="card">
+    <strong>{{ current.template_slug }}</strong>
+    <span class="pill {{ 'fail' if current.failure_code else 'ok' }}">{{ current.state }}</span>
+    <span class="muted">mode: {{ current.mode }}</span>
+    <div class="stages">
+      {% for name in stage_names %}
+        {% set stage = stages | selectattr('name', 'equalto', name) | first %}
+        <span class="{{ stage.state if stage else '' }}">{{ name }}{% if stage and stage.duration_seconds %} · {{ '%.1f'|format(stage.duration_seconds) }}s{% endif %}</span>
+      {% endfor %}
+    </div>
+    {% if current.failure_detail %}
+      <div class="banner fail">
+        <strong>Next action:</strong> {{ current.failure_code }} — {{ current.failure_detail }}
+      </div>
+    {% elif current.state == 'skipped' %}
+      <div class="banner warn">Episode skipped by a quality gate. This is a valid outcome, not a failure.</div>
+    {% endif %}
+    <p><a href="/runs/{{ current.id }}">Open run →</a></p>
+  </div>
+
+  <h2>Recent events</h2>
+  <table>
+    <tr><th>Time</th><th>Stage</th><th>Code</th><th>Message</th></tr>
+    {% for event in events %}
+      <tr>
+        <td class="muted">{{ event.created_at.strftime('%H:%M:%S') }}</td>
+        <td>{{ event.stage or '' }}</td>
+        <td><span class="pill {{ 'fail' if event.severity == 'error' else ('warn' if event.severity == 'warning' else 'ok') }}">{{ event.code }}</span></td>
+        <td>{{ event.message }}</td>
+      </tr>
+    {% endfor %}
+  </table>
+{% else %}
+  <div class="card">No runs yet. Start one with <code>mpvf run coastal-under-1m</code>.</div>
+{% endif %}
+
+<h2>Recent runs</h2>
+<table>
+  <tr><th>Run</th><th>Template</th><th>State</th><th>Mode</th><th>Created</th></tr>
+  {% for row in runs %}
+    <tr>
+      <td><a href="/runs/{{ row.id }}">{{ row.id | shortid }}</a></td>
+      <td>{{ row.template_slug }}</td>
+      <td>{{ row.state }}</td>
+      <td>{{ row.mode }}</td>
+      <td class="muted">{{ row.created_at.strftime('%Y-%m-%d %H:%M') if row.created_at else '' }}</td>
+    </tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,66 @@
+version: 1
+slug: historic-maine
+name: Five Historic Maine Homes Full of Original Character
+enabled: true
+editorial_promise: Pre-1900 Maine houses with documented history and intact detail
+schedule: 0 5 * * 3
+result_count: 5
+alternates_count: 1
+target_runtime_seconds: 420
+target_words: 980
+word_range:
+- 850
+- 1100
+max_segment_words: 140
+fallback_template: unique-maine
+min_candidate_quality: 60
+title_patterns:
+- '{count} Historic Maine Homes Full of Original Character'
+discovery:
+  adapter: zillow
+  search_urls:
+  - https://www.zillow.com/me/historic/
+  max_pages: 4
+  fallback_adapters:
+  - fixture
+hard_filters:
+  status:
+  - active
+  property_types:
+  - single_family
+  - condo
+  - seasonal_residence
+  price_max: 1200000
+  state: ME
+  min_usable_images: 8
+  max_year_built: 1899
+theme_rules:
+  any_of:
+  - pre_1900
+  - historic_character
+scoring:
+  theme_fit: 25
+  visual_strength: 25
+  story_value: 15
+  evidence_quality: 15
+  freshness: 10
+  geographic_diversity: 5
+  asset_completeness: 5
+exclusions:
+  statuses:
+  - pending
+  - contingent
+  - sold
+  - off_market
+  featured_within_days: 120
+  land_only: true
+  auction: true
+publishing:
+  playlist: Historic Maine Homes
+  privacy: private
+  earliest_publish_hour: 17
+design:
+  palette: historic
+  map_style: chart
+  music_family: chamber
+max_history_beats: 3

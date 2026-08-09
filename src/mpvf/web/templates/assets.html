@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Assets</h1>
+{% include "_runnav.html" %}
+{% for key, info in by_property.items() %}
+  <div class="card">
+    <strong>{{ info.town }}</strong>
+    <span class="muted">{{ info.selected }} of {{ info.downloaded }} images selected</span>
+    {% if info.warnings %}<div class="banner warn">{{ info.warnings | join('; ') }}</div>{% endif %}
+    <div class="thumbs">
+      {% for asset in assets if asset.property_key == key and asset.selected %}
+        <figure style="margin:0">
+          <img src="/runs/{{ run.id }}/media/assets/{{ asset.local_path.split('/')[-1] }}" alt="{{ asset.category }}">
+          <figcaption class="muted">{{ asset.category }} · {{ '%.2f'|format(asset.quality_score) }}{% if asset.hero %} · hero{% endif %}</figcaption>
+        </figure>
+      {% endfor %}
+    </div>
+  </div>
+{% endfor %}
+{% endblock %}

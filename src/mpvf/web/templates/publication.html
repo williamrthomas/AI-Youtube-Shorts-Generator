@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Publication</h1>
+{% include "_runnav.html" %}
+<div class="card">
+  <h2 style="margin-top:0">{{ metadata.title or 'No metadata yet' }}</h2>
+  {% if metadata.title_alternates %}<p class="muted">Alternates: {{ metadata.title_alternates | join(' | ') }}</p>{% endif %}
+  <p>
+    <span class="pill {{ 'warn' if metadata.privacy == 'public' else 'ok' }}">{{ metadata.privacy or 'unpublished' }}</span>
+    {% if metadata.scheduled_publish_at %}<span class="muted">scheduled {{ metadata.scheduled_publish_at }}</span>{% endif %}
+    {% if publication.video_id %}<a href="{{ publication.url }}" rel="noreferrer noopener" target="_blank">{{ publication.url }}</a>{% endif %}
+    {% if publication.processing_state %}<span class="muted">processing: {{ publication.processing_state }}</span>{% endif %}
+  </p>
+</div>
+
+<div class="thumbs">
+  {% for name in thumbnails %}
+    <img src="/runs/{{ run.id }}/media/thumbnails/{{ name }}" alt="{{ name }}">
+  {% endfor %}
+</div>
+
+<h2>Description</h2>
+<pre>{{ metadata.description }}</pre>
+
+<h2>Chapters</h2>
+<table>
+  <tr><th class="num">Start</th><th>Title</th></tr>
+  {% for chapter in metadata.chapters or [] %}
+    <tr><td class="num">{{ '%.0f'|format(chapter.start) }}s</td><td>{{ chapter.title }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

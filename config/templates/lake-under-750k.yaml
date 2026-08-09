@@ -1,0 +1,65 @@
+version: 1
+slug: lake-under-750k
+name: Five Beautiful Maine Lake Homes Under $750,000
+enabled: true
+editorial_promise: Maine lake houses and camps under $750,000, waterfront verified
+schedule: 0 5 * * 2
+result_count: 5
+alternates_count: 1
+target_runtime_seconds: 420
+target_words: 980
+word_range:
+- 850
+- 1100
+max_segment_words: 140
+fallback_template: camps-under-500k
+min_candidate_quality: 60
+title_patterns:
+- '{count} Beautiful Maine Lake Homes Under {ceiling}'
+discovery:
+  adapter: zillow
+  search_urls:
+  - https://www.zillow.com/me/lakefront/
+  max_pages: 4
+  fallback_adapters:
+  - fixture
+hard_filters:
+  status:
+  - active
+  property_types:
+  - single_family
+  - condo
+  - seasonal_residence
+  price_max: 749999
+  state: ME
+  min_usable_images: 8
+theme_rules:
+  any_of:
+  - lake_frontage
+  - named_lake
+  - deeded_beach_access
+scoring:
+  theme_fit: 25
+  visual_strength: 25
+  story_value: 15
+  evidence_quality: 15
+  freshness: 10
+  geographic_diversity: 5
+  asset_completeness: 5
+exclusions:
+  statuses:
+  - pending
+  - contingent
+  - sold
+  - off_market
+  featured_within_days: 120
+  land_only: true
+  auction: true
+publishing:
+  playlist: Maine Lake Homes
+  privacy: private
+  earliest_publish_hour: 17
+design:
+  palette: mountain
+  map_style: chart
+  music_family: warm_acoustic

@@ -1,0 +1,63 @@
+version: 1
+slug: ski-mountain
+name: Five Maine Mountain Homes Near the Ski Slopes
+enabled: true
+editorial_promise: Homes within reach of Sugarloaf, Sunday River and Saddleback
+schedule: 0 5 * * 4
+result_count: 5
+alternates_count: 1
+target_runtime_seconds: 420
+target_words: 980
+word_range:
+- 850
+- 1100
+max_segment_words: 140
+fallback_template: unique-maine
+min_candidate_quality: 60
+title_patterns:
+- '{count} Maine Mountain Homes Near the Ski Slopes'
+discovery:
+  adapter: zillow
+  search_urls:
+  - https://www.zillow.com/carrabassett-valley-me/
+  max_pages: 3
+  fallback_adapters:
+  - fixture
+hard_filters:
+  status:
+  - active
+  property_types:
+  - single_family
+  - condo
+  - seasonal_residence
+  price_max: 1500000
+  state: ME
+  min_usable_images: 8
+theme_rules:
+  any_of:
+  - ski_area_proximity
+scoring:
+  theme_fit: 25
+  visual_strength: 25
+  story_value: 15
+  evidence_quality: 15
+  freshness: 10
+  geographic_diversity: 5
+  asset_completeness: 5
+exclusions:
+  statuses:
+  - pending
+  - contingent
+  - sold
+  - off_market
+  featured_within_days: 120
+  land_only: true
+  auction: true
+publishing:
+  playlist: Maine Mountain Homes
+  privacy: private
+  earliest_publish_hour: 17
+design:
+  palette: mountain
+  map_style: topographic
+  music_family: warm_acoustic

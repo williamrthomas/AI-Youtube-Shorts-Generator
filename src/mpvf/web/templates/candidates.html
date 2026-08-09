@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Candidates</h1>
+{% include "_runnav.html" %}
+<p class="sub">Scored, verified candidates. ★ selected · + alternate.</p>
+<table>
+  <tr><th></th><th class="num">Score</th><th>Town</th><th class="num">Price</th><th>Address</th><th>Verification</th><th>Why</th></tr>
+  {% for item in candidates %}
+    {% set record = item.property %}
+    {% set canonical = record.canonical %}
+    <tr>
+      <td>{{ '★' if item.selected else ('+' if item.alternate else '') }}</td>
+      <td class="num">{{ '%.1f'|format(item.total_score) }}</td>
+      <td>{{ record.city or '—' }}</td>
+      <td class="num">{{ canonical.price | money }}</td>
+      <td>
+        {{ canonical.raw_address or record.normalized_address }}
+        {% if canonical.listing_url %}<br><a class="muted" href="{{ canonical.listing_url }}" rel="noreferrer noopener nofollow" target="_blank">listing</a>{% endif %}
+      </td>
+      <td>
+        {% if record.verification and record.verification.verified %}
+          <span class="pill ok">verified {{ '%.2f'|format(record.verification.confidence) }}</span>
+        {% elif record.verification and record.verification.blocking_conflicts %}
+          <span class="pill fail">conflict</span>
+          <div class="muted">{{ record.verification.blocking_conflicts[0] }}</div>
+        {% else %}<span class="pill warn">unverified</span>{% endif %}
+      </td>
+      <td class="muted">{{ item.selection_reason or item.exclusion_reason or '' }}</td>
+    </tr>
+  {% endfor %}
+</table>
+{% endblock %}

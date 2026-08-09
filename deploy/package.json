@@ -1,0 +1,19 @@
+{
+  "name": "mpvf-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.0.35"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260801.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}

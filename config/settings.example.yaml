@@ -1,0 +1,69 @@
+# Maine Property Video Factory settings.
+# Copy to config/settings.yaml and edit. Secrets never belong in this file —
+# set MPVF_CLOUDFLARE_ACCOUNT_ID / MPVF_CLOUDFLARE_API_TOKEN /
+# MPVF_OPENROUTER_API_KEY in the environment, or drop them as files in
+# secrets/ (mode 700).
+
+data_dir: data
+secrets_dir: secrets
+templates_dir: config/templates
+pronunciation_path: config/pronunciation.yaml
+source_domains_path: config/source-domains.yaml
+
+timezone: America/New_York
+# review | private_upload | scheduled | full_auto
+# Keep private_upload until the twenty-run pilot passes (§4.3).
+publishing_mode: private_upload
+earliest_publish_hour: 17
+
+# All inference is hosted: Cloudflare Workers AI first, OpenRouter second,
+# and the deterministic writer as the floor so an outage degrades rather
+# than fails. Model ids are configuration — swap them freely.
+provider:
+  kind: cloudflare              # cloudflare | openrouter | ollama | openai_compatible | deterministic
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  secondary_kind: openrouter
+  secondary_model: anthropic/claude-3.5-haiku
+  temperature: 0.4
+  timeout_seconds: 180
+  max_attempts: 3
+  fallback: deterministic
+  require_schema_support: true  # OpenRouter: only route to upstreams honouring json_schema
+
+speech:
+  engine: cloudflare            # cloudflare | kokoro | null
+  model: "@cf/myshell-ai/melotts"
+  voice: af_heart
+  language: en
+  speed: 1.0
+  aligner: cloudflare           # cloudflare | faster_whisper | none
+  alignment_model: "@cf/openai/whisper-large-v3-turbo"
+
+storage:
+  artifacts: local              # local | r2
+  r2_bucket: mpvf-artifacts
+  r2_prefix: runs
+  # r2_endpoint: https://<account-id>.r2.cloudflarestorage.com
+  database: sqlite              # sqlite | d1
+
+render:
+  width: 1920
+  height: 1080
+  fps: 30
+  video_crf: 18
+
+mix:
+  music_enabled: true
+  target_lufs: -14.0
+  true_peak_db: -1.0
+
+acquisition:
+  request_delay_seconds: 2.5
+  max_concurrency: 4
+
+gates:
+  editorial_pass_score: 82
+  min_candidate_quality: 60
+
+dashboard_host: 127.0.0.1
+dashboard_port: 8765

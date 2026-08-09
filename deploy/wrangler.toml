@@ -1,0 +1,62 @@
+# Cloudflare deployment for the Maine Property Video Factory.
+#
+# The Worker is the control plane: it wakes on a cron trigger, decides what to
+# run, and starts a container. It never renders — a Workers isolate has no
+# native binaries and a hard CPU ceiling, and this pipeline shells out to
+# FFmpeg and Playwright. See docs/cloudflare.md for the boundary.
+
+name = "mpvf"
+main = "worker/index.ts"
+compatibility_date = "2026-08-01"
+workers_dev = false
+
+# 05:00 America/New_York in UTC (EDT). Adjust for EST in winter.
+[triggers]
+crons = ["0 9 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mpvf"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "mpvf-artifacts"
+
+[[queues.producers]]
+binding = "EPISODES"
+queue = "mpvf-episodes"
+
+[[queues.consumers]]
+queue = "mpvf-episodes"
+max_batch_size = 1
+max_retries = 2
+# One episode takes tens of minutes; do not let the queue redeliver underneath it.
+visibility_timeout_ms = 5400000
+
+# The render/acquisition tier. Requires Cloudflare Containers on the account.
+[[containers]]
+class_name = "EpisodeRunner"
+image = "./Dockerfile"
+instance_type = "standard"
+max_instances = 2
+
+[[durable_objects.bindings]]
+name = "EPISODE_RUNNER"
+class_name = "EpisodeRunner"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["EpisodeRunner"]
+
+[vars]
+MPVF_TEMPLATES = "coastal-under-1m,lake-under-750k,historic-maine,ski-mountain,unique-maine"
+MPVF_PUBLISHING_MODE = "private_upload"
+
+# Secrets are set with `wrangler secret put`, never in this file:
+#   MPVF_CLOUDFLARE_API_TOKEN
+#   MPVF_OPENROUTER_API_KEY
+#   MPVF_R2_ACCESS_KEY_ID
+#   MPVF_R2_SECRET_ACCESS_KEY
+#   MPVF_YOUTUBE_CLIENT_SECRET
+#   MPVF_YOUTUBE_TOKEN
